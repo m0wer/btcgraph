@@ -407,6 +407,12 @@ function renderGraph() {
   if (sigmaInstance) {
     sigmaInstance.kill();
   }
+
+  const settings = graphologyLibrary.layoutForceAtlas2.inferSettings(graph);
+  graphologyLibrary.layoutForceAtlas2.assign(graph, {
+    iterations: 50,
+    settings: settings
+  });
   
   // Improved settings for better visualization
   sigmaInstance = new Sigma(graph, container, {
@@ -460,32 +466,6 @@ function renderGraph() {
     },
   });
 
-  // Add ForceAtlas2 layout
-  const sensibleSettings = {
-    worker: true,
-    barnesHutOptimize: graph.order > 1000,
-    strongGravityMode: true,
-    gravity: 0.05,
-    scalingRatio: 10,
-    slowDown: 10,
-    linLogMode: false,
-    outboundAttractionDistribution: false,
-    adjustSizes: false,
-    edgeWeightInfluence: 1,
-    startingIterations: 50,
-    iterationsPerRender: 10
-  };
-  
-  // Start ForceAtlas2 algorithm
-  sigmaInstance.startForceAtlas2(sensibleSettings);
-
-  // Stop layout after 5 seconds to prevent overheating
-  setTimeout(() => {
-    if (sigmaInstance && sigmaInstance.isForceAtlas2Running()) {
-      sigmaInstance.stopForceAtlas2();
-    }
-  }, 5000);
-  
   // Add a button to start/stop the layout
   const layoutControlBtn = document.createElement('button');
   layoutControlBtn.textContent = 'Stop Layout';
@@ -493,15 +473,6 @@ function renderGraph() {
   layoutControlBtn.style.top = '10px';
   layoutControlBtn.style.right = '10px';
   layoutControlBtn.style.zIndex = '1000';
-  layoutControlBtn.addEventListener('click', () => {
-    if (sigmaInstance.isForceAtlas2Running()) {
-      sigmaInstance.stopForceAtlas2();
-      layoutControlBtn.textContent = 'Start Layout';
-    } else {
-      sigmaInstance.startForceAtlas2();
-      layoutControlBtn.textContent = 'Stop Layout';
-    }
-  });
   container.appendChild(layoutControlBtn);
   
   // Apply poison status to initial marked elements
