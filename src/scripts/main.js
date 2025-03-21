@@ -85,10 +85,10 @@ function processTransactions(transactions) {
             label: taggedAddresses.has(inputAddress) ? taggedAddresses.get(inputAddress) : inputAddress,
             x: Math.random(),
             y: Math.random(),
-            size: 6 + input.prevout.value / 100000000, // Size based on BTC value, made 2x bigger
+            size: input.prevout.value,
             color: '#4CAF50',
             isPoisoned: false,
-            balance: input.prevout.value / 100000000,
+            balance: input.prevout.value,
             shape: 'square' // Square shape for input addresses
           });
         } else if (!graph.getNodeAttribute(inputAddress, 'shape')) {
@@ -108,10 +108,10 @@ function processTransactions(transactions) {
             label: taggedAddresses.has(outputAddress) ? taggedAddresses.get(outputAddress) : outputAddress,
             x: Math.random(),
             y: Math.random(),
-            size: 6 + output.value / 100000000, // Size based on BTC value, made 2x bigger
+            size: output.value,
             color: '#4CAF50',
             isPoisoned: false,
-            balance: output.value / 100000000,
+            balance: output.value,
             shape: 'circle' // Circle shape for output addresses (default)
           });
         }
@@ -129,10 +129,10 @@ function processTransactions(transactions) {
             if (!graph.hasEdge(edgeId) && graph.hasNode(inputAddress) && graph.hasNode(outputAddress)) {
               const sats = Math.round(output.value);
               graph.addEdgeWithKey(edgeId, inputAddress, outputAddress, {
-                size: 2 + output.value / 50000000,
+                size: output.value / 100000000,
                 color: '#888',
                 isPoisoned: false,
-                amount: output.value / 100000000,
+                amount: output.value,
                 sats: sats,
                 date: new Date(tx.status.block_time * 1000).toISOString().split('T')[0],
                 label: `${sats.toLocaleString()} sats`, // Format with commas
@@ -410,8 +410,15 @@ function renderGraph() {
 
   const settings = graphologyLibrary.layoutForceAtlas2.inferSettings(graph);
   graphologyLibrary.layoutForceAtlas2.assign(graph, {
-    iterations: 50,
-    settings: settings
+    iterations: 50000,
+    settings: {
+      adjustSizes: true,
+      barnesHutOptimize: false,
+      strongGravityMode: true,
+      gravity: 0.05,
+      scalingRatio: 1,
+      slowDown: 1,
+    },
   });
   
   // Improved settings for better visualization
@@ -523,7 +530,7 @@ function showEdgeInfo(edgeId) {
       <p><strong>Transaction ID:</strong> ${attributes.txid || edgeId}</p>
       <p><strong>From:</strong> ${source}</p>
       <p><strong>To:</strong> ${target}</p>
-      <p><strong>Amount:</strong> ${attributes.amount ? attributes.amount.toFixed(8) : 'N/A'} BTC</p>
+      <p><strong>Amount:</strong> ${attributes.amount ? attributes.amount.toFixed(8) : 'N/A'} sats</p>
       <p><strong>Amount in Satoshis:</strong> ${formattedSats}</p>
       <p><strong>Date:</strong> ${attributes.date || 'N/A'}</p>
       <p><strong>Status:</strong> ${attributes.isPoisoned ? 'Poisoned' : 'Clean'}</p>
@@ -599,7 +606,7 @@ function showNodeInfo(nodeId) {
     
     nodeDetails.innerHTML = `
       <p><strong>Address:</strong> ${nodeId}</p>
-      <p><strong>Balance:</strong> ${attributes.balance.toFixed(8)} BTC</p>
+      <p><strong>Balance:</strong> ${attributes.balance.toFixed(8)} sats</p>
       <p><strong>Status:</strong> ${attributes.isPoisoned ? 'Poisoned' : 'Clean'}</p>
       <div>
         <input type="text" id="node-tag-input" placeholder="Add a label for this address">
@@ -637,7 +644,7 @@ function showEdgeInfo(edgeId) {
       <p><strong>Transaction ID:</strong> ${edgeId}</p>
       <p><strong>From:</strong> ${source}</p>
       <p><strong>To:</strong> ${target}</p>
-      <p><strong>Amount:</strong> ${attributes.amount.toFixed(8)} BTC</p>
+      <p><strong>Amount:</strong> ${attributes.amount.toFixed(8)} sats</p>
       <p><strong>Date:</strong> ${attributes.date}</p>
       <p><strong>Status:</strong> ${attributes.isPoisoned ? 'Poisoned' : 'Clean'}</p>
       <div>
@@ -714,9 +721,6 @@ async function fetchNeighborNodes(nodeId) {
   } catch (error) {
     console.error('Error fetching neighbor nodes:', error);
     showNotification('Failed to fetch neighbor nodes');
-    
-    // Fallback to simulated neighbors if the API call fails
-    simulateNeighborNodes(nodeId, DEFAULT_NEIGHBORS);
   }
 }
 
@@ -832,58 +836,6 @@ function updateAddressItemsStyle() {
       }
     }
   });
-}
-
-function simulateNeighborNodes(nodeId, count) {
-  // Add 'count' new nodes as neighbors
-  for (let i = 0; i < count; i++) {
-    const newAddr = Math.random().toString(36).substring(2, 15);
-    // Only add if it doesn't already exist
-    if (!graph.hasNode(newAddr)) {
-      const isInput = Math.random() > 0.5;
-      
-      graph.addNode(newAddr, {
-        label: newAddr,  // Full address as label
-        x: graph.getNodeAttribute(nodeId, 'x') + (Math.random() - 0.5) * 0.5,
-        y: graph.getNodeAttribute(nodeId, 'y') + (Math.random() - 0.5) * 0.5,
-        size: 4 + Math.random() * 6, // 2x bigger
-        color: '#4CAF50',
-        isPoisoned: false,
-        balance: Math.random() * 3,
-        shape: isInput ? 'square' : 'circle'
-      });
-      
-      const txid = Math.random().toString(36).substring(2, 15);
-      const sats = Math.round(Math.random() * 10000000);
-      
-      if (isInput) {
-        graph.addEdgeWithKey(txid, newAddr, nodeId, {
-          size: 2 + Math.random() * 2, // 2x bigger
-          color: '#888',
-          isPoisoned: false,
-          amount: sats / 100000000,
-          sats: sats,
-          date: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          txid: txid,
-          label: `${sats} sats` // Show sats on edge
-        });
-      } else {
-        graph.addEdgeWithKey(txid, nodeId, newAddr, {
-          size: 2 + Math.random() * 2, // 2x bigger
-          color: '#888',
-          isPoisoned: false,
-          amount: sats / 100000000,
-          sats: sats,
-          date: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          txid: txid,
-          label: `${sats} sats` // Show sats on edge
-        });
-      }
-    }
-  }
-  // Apply poison status to new elements
-  propagatePoison();
-  sigmaInstance.refresh();
 }
 
 // Event Listeners
