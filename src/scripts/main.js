@@ -24,13 +24,27 @@ function showNotification(message) {
 
 function addAddress() {
   const addressInput = document.getElementById('address-input');
-  const address = addressInput.value.trim();
+  const addressesText = addressInput.value.trim();
+  if (!addressesText) return;
   
-  if (address && !addresses.has(address)) {
-    addresses.add(address);
-    updateAddressesList();
-    addressInput.value = '';
-  }
+  const lines = addressesText.split('\n');
+  lines.forEach(line => {
+    if (line.trim()) {
+      let address, label;
+      if (line.includes(':')) {
+        [address, label] = line.split(':', 2).map(part => part.trim());
+      } else {
+        address = line.trim();
+        label = address;
+      }
+      if (address) {
+        addresses.add(address);
+        if (label) {
+          taggedAddresses.set(address, label);
+        }
+      }
+    }
+  });
 }
 
 function removeAddress(address) {
@@ -45,41 +59,129 @@ function updateAddressesList() {
   addresses.forEach(address => {
     const item = document.createElement('div');
     item.className = 'address-item';
-    
     const addressText = document.createElement('span');
-    addressText.textContent = address.substring(0, 15) + '...';
+    // Show full address
+    addressText.textContent = address + (taggedAddresses.has(address) ? ` (${taggedAddresses.get(address)})` : '');
     addressText.title = address;
-    
     const removeBtn = document.createElement('button');
     removeBtn.className = 'remove-btn';
     removeBtn.textContent = 'X';
     removeBtn.onclick = () => removeAddress(address);
-    
     item.appendChild(addressText);
     item.appendChild(removeBtn);
     addressesList.appendChild(item);
   });
 }
 
-function addPoisoned() {
-  const typeSelect = document.getElementById('poison-type');
-  const poisonInput = document.getElementById('poison-input');
-  const type = typeSelect.value;
-  const id = poisonInput.value.trim();
+function processTransactions(transactions) {
+  transactions.forEach(tx => {
+    // Process inputs
+    tx.vin.forEach(input => {
+      if (input.prevout && input.prevout.scriptpubkey_address) {
+        const inputAddress = input.prevout.scriptpubkey_address;
+        // Add input address if it doesn't exist
+        if (!graph.hasNode(inputAddress)) {
+          graph.addNode(inputAddress, {
+            label: taggedAddresses.has(inputAddress) ? taggedAddresses.get(inputAddress) : inputAddress,
+            x: Math.random(),
+            y: Math.random(),
+            size: 6 + input.prevout.value / 100000000, // Size based on BTC value, made 2x bigger
+            color: '#4CAF50',
+            isPoisoned: false,
+            balance: input.prevout.value / 100000000,
+            shape: 'square' // Square shape for input addresses
+          });
+        } else if (!graph.getNodeAttribute(inputAddress, 'shape')) {
+          // If node exists but shape not set, set it now
+          graph.setNodeAttribute(inputAddress, 'shape', 'square');
+        }
+      }
+    });
+    
+    // Process outputs
+    tx.vout.forEach(output => {
+      if (output.scriptpubkey_address) {
+        const outputAddress = output.scriptpubkey_address;
+        // Add output address if it doesn't exist
+        if (!graph.hasNode(outputAddress)) {
+          graph.addNode(outputAddress, {
+            label: taggedAddresses.has(outputAddress) ? taggedAddresses.get(outputAddress) : outputAddress,
+            x: Math.random(),
+            y: Math.random(),
+            size: 6 + output.value / 100000000, // Size based on BTC value, made 2x bigger
+            color: '#4CAF50',
+            isPoisoned: false,
+            balance: output.value / 100000000,
+            shape: 'circle' // Circle shape for output addresses (default)
+          });
+        }
+      }
+    });
+    
+    // Create edges for each input-output pair
+    tx.vin.forEach(input => {
+      if (input.prevout && input.prevout.scriptpubkey_address) {
+        const inputAddress = input.prevout.scriptpubkey_address;
+        tx.vout.forEach(output => {
+          if (output.scriptpubkey_address) {
+            const outputAddress = output.scriptpubkey_address;
+            const edgeId = `${tx.txid}_${inputAddress}_${outputAddress}`;
+            if (!graph.hasEdge(edgeId) && graph.hasNode(inputAddress) && graph.hasNode(outputAddress)) {
+              const sats = Math.round(output.value);
+              graph.addEdgeWithKey(edgeId, inputAddress, outputAddress, {
+                size: 2 + output.value / 50000000,
+                color: '#888',
+                isPoisoned: false,
+                amount: output.value / 100000000,
+                sats: sats,
+                date: new Date(tx.status.block_time * 1000).toISOString().split('T')[0],
+                label: `${sats.toLocaleString()} sats`, // Format with commas
+                txid: tx.txid
+              });
+            }
+          }
+        });
+      }
+    });
+  });
   
-  if (!id) return;
-  
-  if (type === 'address') {
-    poisonedAddresses.add(id);
+  // Apply layout and update rendering
+  if (sigmaInstance) {
+    sigmaInstance.refresh();
   } else {
-    poisonedTransactions.add(id);
+    renderGraph();
   }
   
-  updatePoisonedList();
-  poisonInput.value = '';
+  // Check for poisoned elements
+  propagatePoison();
+}
+
+function addPoisoned() {
+  const poisonInput = document.getElementById('poison-input');
+  const poisonedText = poisonInput.value.trim();
+  if (!poisonedText) return;
   
-  // If the element exists in the graph, mark it as poisoned
-  if (graph.hasNode(id) || graph.hasEdge(id)) {
+  const lines = poisonedText.split('\n');
+  lines.forEach(line => {
+    if (line.trim()) {
+      let txid, label;
+      if (line.includes(':')) {
+        [txid, label] = line.split(':', 2).map(part => part.trim());
+      } else {
+        txid = line.trim();
+        label = txid;
+      }
+      if (txid) {
+        poisonedTransactions.add(txid);
+        if (label && label !== txid) {
+          taggedTransactions.set(txid, label);
+        }
+      }
+    }
+  });
+  
+  // If any poisoned transaction exists in the graph, propagate poison
+  if ([...poisonedTransactions].some(txid => graph.hasEdge(txid))) {
     propagatePoison();
   }
 }
@@ -154,14 +256,7 @@ function resetPoisonStatus() {
 function propagatePoison() {
   resetPoisonStatus();
   
-  // Mark initial poisoned nodes and edges
-  poisonedAddresses.forEach(address => {
-    if (graph.hasNode(address)) {
-      graph.setNodeAttribute(address, 'isPoisoned', true);
-      graph.setNodeAttribute(address, 'color', '#f44336');
-    }
-  });
-  
+  // Mark initial poisoned transactions
   poisonedTransactions.forEach(txid => {
     if (graph.hasEdge(txid)) {
       graph.setEdgeAttribute(txid, 'isPoisoned', true);
@@ -178,27 +273,7 @@ function propagatePoison() {
     
     // Forward propagation (from inputs to outputs)
     if (direction === 'forward' || direction === 'both') {
-      graph.forEachNode((node, attributes) => {
-        if (attributes.isPoisoned) {
-          // Find outgoing transactions (edges where this node is the source)
-          graph.forEachOutEdge(node, (edge, edgeAttributes, target) => {
-            if (!edgeAttributes.isPoisoned) {
-              graph.setEdgeAttribute(edge, 'isPoisoned', true);
-              graph.setEdgeAttribute(edge, 'color', '#f44336');
-              changed = true;
-            }
-            
-            // Poison the target node
-            if (!graph.getNodeAttribute(target, 'isPoisoned')) {
-              graph.setNodeAttribute(target, 'isPoisoned', true);
-              graph.setNodeAttribute(target, 'color', '#f44336');
-              changed = true;
-            }
-          });
-        }
-      });
-      
-      // Also propagate from poisoned transactions to output addresses
+      // Propagate from poisoned transactions to output addresses
       graph.forEachEdge((edge, attributes, source, target) => {
         if (attributes.isPoisoned) {
           if (!graph.getNodeAttribute(target, 'isPoisoned')) {
@@ -206,33 +281,22 @@ function propagatePoison() {
             graph.setNodeAttribute(target, 'color', '#f44336');
             changed = true;
           }
+          
+          // Propagate from poisoned addresses to outgoing transactions
+          graph.forEachOutEdge(target, (outEdge, outAttr) => {
+            if (!graph.getEdgeAttribute(outEdge, 'isPoisoned')) {
+              graph.setEdgeAttribute(outEdge, 'isPoisoned', true);
+              graph.setEdgeAttribute(outEdge, 'color', '#f44336');
+              changed = true;
+            }
+          });
         }
       });
     }
     
     // Backward propagation (from outputs to inputs)
     if (direction === 'backward' || direction === 'both') {
-      graph.forEachNode((node, attributes) => {
-        if (attributes.isPoisoned) {
-          // Find incoming transactions (edges where this node is the target)
-          graph.forEachInEdge(node, (edge, edgeAttributes, source) => {
-            if (!edgeAttributes.isPoisoned) {
-              graph.setEdgeAttribute(edge, 'isPoisoned', true);
-              graph.setEdgeAttribute(edge, 'color', '#f44336');
-              changed = true;
-            }
-            
-            // Poison the source node
-            if (!graph.getNodeAttribute(source, 'isPoisoned')) {
-              graph.setNodeAttribute(source, 'isPoisoned', true);
-              graph.setNodeAttribute(source, 'color', '#f44336');
-              changed = true;
-            }
-          });
-        }
-      });
-      
-      // Also propagate from poisoned transactions to input addresses
+      // Propagate from poisoned transactions to input addresses
       graph.forEachEdge((edge, attributes, source, target) => {
         if (attributes.isPoisoned) {
           if (!graph.getNodeAttribute(source, 'isPoisoned')) {
@@ -240,6 +304,15 @@ function propagatePoison() {
             graph.setNodeAttribute(source, 'color', '#f44336');
             changed = true;
           }
+          
+          // Propagate from poisoned addresses to incoming transactions
+          graph.forEachInEdge(source, (inEdge, inAttr) => {
+            if (!graph.getEdgeAttribute(inEdge, 'isPoisoned')) {
+              graph.setEdgeAttribute(inEdge, 'isPoisoned', true);
+              graph.setEdgeAttribute(inEdge, 'color', '#f44336');
+              changed = true;
+            }
+          });
         }
       });
     }
@@ -249,6 +322,27 @@ function propagatePoison() {
   if (sigmaInstance) {
     sigmaInstance.refresh();
   }
+}
+
+function updatePoisonedList() {
+  const poisonedList = document.getElementById('poisoned-list');
+  poisonedList.innerHTML = '';
+  
+  poisonedTransactions.forEach(txid => {
+    const item = document.createElement('div');
+    item.className = 'poisoned-item';
+    const txText = document.createElement('span');
+    // Show full transaction ID
+    txText.textContent = 'Tx: ' + txid + (taggedTransactions.has(txid) ? ` (${taggedTransactions.get(txid)})` : '');
+    txText.title = txid;
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'remove-btn';
+    removeBtn.textContent = 'X';
+    removeBtn.onclick = () => removePoisoned('transaction', txid);
+    item.appendChild(txText);
+    item.appendChild(removeBtn);
+    poisonedList.appendChild(item);
+  });
 }
 
 async function fetchTransactionData() {
@@ -307,116 +401,222 @@ async function fetchTransactionData() {
   }
 }
 
-function processTransactions(transactions) {
-  transactions.forEach(tx => {
-    // Process inputs
-    tx.vin.forEach(input => {
-      if (input.prevout && input.prevout.scriptpubkey_address) {
-        const inputAddress = input.prevout.scriptpubkey_address;
-        // Add input address if it doesn't exist
-        if (!graph.hasNode(inputAddress)) {
-          graph.addNode(inputAddress, {
-            label: inputAddress.substring(0, 8) + '...',
-            x: Math.random(),
-            y: Math.random(),
-            size: 3 + input.prevout.value / 100000000, // Size based on BTC value
-            color: '#4CAF50',
-            isPoisoned: false,
-            balance: input.prevout.value / 100000000
-          });
-        }
-      }
-    });
-    
-    // Process outputs
-    tx.vout.forEach(output => {
-      if (output.scriptpubkey_address) {
-        const outputAddress = output.scriptpubkey_address;
-        // Add output address if it doesn't exist
-        if (!graph.hasNode(outputAddress)) {
-          graph.addNode(outputAddress, {
-            label: outputAddress.substring(0, 8) + '...',
-            x: Math.random(),
-            y: Math.random(),
-            size: 3 + output.value / 100000000, // Size based on BTC value
-            color: '#4CAF50',
-            isPoisoned: false,
-            balance: output.value / 100000000
-          });
-        }
-      }
-    });
-    
-    // Add edges from inputs to outputs
-    tx.vin.forEach(input => {
-      if (input.prevout && input.prevout.scriptpubkey_address) {
-        const inputAddress = input.prevout.scriptpubkey_address;
-        tx.vout.forEach(output => {
-          if (output.scriptpubkey_address) {
-            const outputAddress = output.scriptpubkey_address;
-            // Add the transaction edge - check if it doesn't exist first
-            if (!graph.hasEdge(tx.txid) && graph.hasNode(inputAddress) && graph.hasNode(outputAddress)) {
-              graph.addEdgeWithKey(tx.txid, inputAddress, outputAddress, {
-                size: 1 + output.value / 50000000, // Size based on BTC value
-                color: '#888',
-                isPoisoned: false,
-                amount: output.value / 100000000,
-                date: new Date(tx.status.block_time * 1000).toISOString().split('T')[0]
-              });
-            }
-          }
-        });
-      }
-    });
-  });
-  
-  // Apply layout and update rendering
-  if (sigmaInstance) {
-    sigmaInstance.refresh();
-  } else {
-    renderGraph();
-  }
-  
-  // Check for poisoned elements
-  propagatePoison();
-}
-
 function renderGraph() {
   // Initialize sigma
   const container = document.getElementById('graph');
   if (sigmaInstance) {
     sigmaInstance.kill();
   }
-
-  const graph2 = new graphology.Graph();
-  graph2.addNode("1", { label: "Node 1", x: 0, y: 0, size: 10, color: "blue" });
-  graph2.addNode("2", { label: "Node 2", x: 1, y: 1, size: 20, color: "red" });
-  graph2.addEdge("1", "2", { size: 5, color: "purple" });
-
-  // This is the fix - remove 'defaultNodeType' and use settings that Sigma can understand
+  
+  // Improved settings for better visualization
   sigmaInstance = new Sigma(graph, container, {
-    renderEdgeLabels: false,
+    renderEdgeLabels: true,
     defaultEdgeType: 'arrow',
-    // Remove defaultNodeType: 'circle' as it's causing the issue
     labelDensity: 0.07,
     labelGridCellSize: 60,
     labelRenderedSizeThreshold: 6,
     minCameraRatio: 0.1,
-    maxCameraRatio: 10
+    maxCameraRatio: 10,
+    // Improved defaults for node and edge rendering
+    defaultNodeColor: '#4CAF50',
+    defaultEdgeColor: '#888',
+    defaultNodeSize: 8, // Increased from 5 to 8 for better visibility
+    defaultEdgeSize: 2,
+    // Enable edge hovering
+    enableEdgeHovering: true,
+    edgeHoverPrecision: 5,
+    // Adjust node and edge sizes for better visibility
+    nodeReducer: (node, data) => {
+      const size = Math.max(5, Math.min(20, data.size * 1.5));
+      const shape = data.shape || 'circle';
+      
+      // Only show labels for input nodes (square shape) or tagged nodes
+      if (shape !== 'square' && !taggedAddresses.has(node)) {
+        return {
+          ...data,
+          size,
+          label: '' // Remove label for non-input nodes that aren't tagged
+        };
+      }
+      
+      return {
+        ...data,
+        size
+      };
+    },
+    edgeReducer: (edge, data) => {
+      // Ensure edge sizes are not too small or too large
+      const size = Math.max(1, Math.min(5, data.size));
+      
+      // Format the sats with commas if available
+      if (data.sats) {
+        data.label = `${data.sats.toLocaleString()} sats`;
+      }
+      
+      return {
+        ...data,
+        size
+      };
+    },
   });
 
+  // Add ForceAtlas2 layout
+  const sensibleSettings = {
+    worker: true,
+    barnesHutOptimize: graph.order > 1000,
+    strongGravityMode: true,
+    gravity: 0.05,
+    scalingRatio: 10,
+    slowDown: 10,
+    linLogMode: false,
+    outboundAttractionDistribution: false,
+    adjustSizes: false,
+    edgeWeightInfluence: 1,
+    startingIterations: 50,
+    iterationsPerRender: 10
+  };
+  
+  // Start ForceAtlas2 algorithm
+  sigmaInstance.startForceAtlas2(sensibleSettings);
+
+  // Stop layout after 5 seconds to prevent overheating
+  setTimeout(() => {
+    if (sigmaInstance && sigmaInstance.isForceAtlas2Running()) {
+      sigmaInstance.stopForceAtlas2();
+    }
+  }, 5000);
+  
+  // Add a button to start/stop the layout
+  const layoutControlBtn = document.createElement('button');
+  layoutControlBtn.textContent = 'Stop Layout';
+  layoutControlBtn.style.position = 'absolute';
+  layoutControlBtn.style.top = '10px';
+  layoutControlBtn.style.right = '10px';
+  layoutControlBtn.style.zIndex = '1000';
+  layoutControlBtn.addEventListener('click', () => {
+    if (sigmaInstance.isForceAtlas2Running()) {
+      sigmaInstance.stopForceAtlas2();
+      layoutControlBtn.textContent = 'Start Layout';
+    } else {
+      sigmaInstance.startForceAtlas2();
+      layoutControlBtn.textContent = 'Stop Layout';
+    }
+  });
+  container.appendChild(layoutControlBtn);
+  
   // Apply poison status to initial marked elements
   propagatePoison();
+  
   // Add event listeners for node and edge clicks
   sigmaInstance.on('clickNode', ({ node }) => {
     showNodeInfo(node);
     fetchNeighborNodes(node);
   });
+  
   sigmaInstance.on('clickEdge', ({ edge }) => {
     showEdgeInfo(edge);
   });
+  
+  // Add hover interactions for better UX
+  sigmaInstance.on('enterNode', ({ node }) => {
+    highlightConnections(node);
+  });
+  
+  sigmaInstance.on('leaveNode', () => {
+    resetHighlighting();
+  });
+  
+  sigmaInstance.on('enterEdge', ({ edge }) => {
+    highlightTransaction(edge);
+  });
+  
+  sigmaInstance.on('leaveEdge', () => {
+    resetHighlighting();
+  });
+  
   // Update the tagged elements section
   updateTaggedElementsList();
+}
+
+function showEdgeInfo(edgeId) {
+  const edgeInfo = document.getElementById('edge-info');
+  const edgeDetails = document.getElementById('edge-details');
+  if (graph.hasEdge(edgeId)) {
+    const attributes = graph.getEdgeAttributes(edgeId);
+    const [source, target] = graph.extremities(edgeId);
+    
+    // Format sats with commas
+    const formattedSats = attributes.sats ? attributes.sats.toLocaleString() : 'N/A';
+    
+    edgeDetails.innerHTML = `
+      <p><strong>Transaction ID:</strong> ${attributes.txid || edgeId}</p>
+      <p><strong>From:</strong> ${source}</p>
+      <p><strong>To:</strong> ${target}</p>
+      <p><strong>Amount:</strong> ${attributes.amount ? attributes.amount.toFixed(8) : 'N/A'} BTC</p>
+      <p><strong>Amount in Satoshis:</strong> ${formattedSats}</p>
+      <p><strong>Date:</strong> ${attributes.date || 'N/A'}</p>
+      <p><strong>Status:</strong> ${attributes.isPoisoned ? 'Poisoned' : 'Clean'}</p>
+      <div>
+        <input type="text" id="edge-tag-input" placeholder="Add a label for this transaction">
+        <button id="add-edge-tag-btn">Add Label</button>
+      </div>
+    `;
+    // Add event listener for tagging
+    document.getElementById('add-edge-tag-btn').addEventListener('click', () => {
+      const tagInput = document.getElementById('edge-tag-input');
+      const tag = tagInput.value.trim();
+      if (tag) {
+        taggedTransactions.set(attributes.txid || edgeId, tag);
+        updateTaggedElementsList();
+        tagInput.value = '';
+      }
+    });
+    edgeInfo.style.display = 'block';
+  }
+}
+
+// Add highlighting functions for better UX
+function highlightConnections(nodeId) {
+  if (!sigmaInstance || !graph) return;
+  
+  graph.setNodeAttribute(nodeId, 'highlighted', true);
+  
+  // Highlight edges connected to this node
+  graph.forEachEdge((edge, attributes, source, target) => {
+    if (source === nodeId || target === nodeId) {
+      graph.setEdgeAttribute(edge, 'highlighted', true);
+    }
+  });
+  
+  sigmaInstance.refresh();
+}
+
+function highlightTransaction(edgeId) {
+  if (!sigmaInstance || !graph) return;
+  
+  graph.setEdgeAttribute(edgeId, 'highlighted', true);
+  
+  // Highlight nodes connected to this edge
+  const [source, target] = graph.extremities(edgeId);
+  graph.setNodeAttribute(source, 'highlighted', true);
+  graph.setNodeAttribute(target, 'highlighted', true);
+  
+  sigmaInstance.refresh();
+}
+
+function resetHighlighting() {
+  if (!sigmaInstance || !graph) return;
+  
+  // Reset all node and edge highlights
+  graph.forEachNode((node) => {
+    graph.setNodeAttribute(node, 'highlighted', false);
+  });
+  
+  graph.forEachEdge((edge) => {
+    graph.setEdgeAttribute(edge, 'highlighted', false);
+  });
+  
+  sigmaInstance.refresh();
 }
 
 function showNodeInfo(nodeId) {
@@ -491,69 +691,62 @@ function showEdgeInfo(edgeId) {
   }
 }
 
-function fetchNeighborNodes(nodeId) {
-  // In a real implementation, this would fetch data from the mempool API
-  // For demo purposes, we'll simulate adding new nodes
+// Set default number of neighbors to fetch
+const DEFAULT_NEIGHBORS = 2;
+
+async function fetchNeighborNodes(nodeId) {
   showNotification('Fetching neighbor nodes...');
   
-  // Check if we already have a significant number of neighbors
-  const neighbors = [
-    ...graph.inNeighbors(nodeId),
-    ...graph.outNeighbors(nodeId)
-  ];
-  
-  if (neighbors.length > 5) {
-    // Already have enough neighbors
-    showNotification('Neighbors already loaded');
-    return;
-  }
-  
-  // Add 2-3 new nodes as neighbors
-  const numNewNeighbors = 2 + Math.floor(Math.random() * 2);
-  for (let i = 0; i < numNewNeighbors; i++) {
-    const newAddr = 'addr_' + Math.random().toString(36).substring(2, 15);
+  try {
+    // Get the address for the node
+    const address = nodeId;
     
-    // Only add if it doesn't already exist
-    if (!graph.hasNode(newAddr)) {
-      graph.addNode(newAddr, {
-        label: newAddr.substring(0, 8) + '...',
-        x: graph.getNodeAttribute(nodeId, 'x') + (Math.random() - 0.5) * 0.5,
-        y: graph.getNodeAttribute(nodeId, 'y') + (Math.random() - 0.5) * 0.5,
-        size: 2 + Math.random() * 6,
-        color: '#4CAF50',
-        isPoisoned: false,
-        balance: Math.random() * 3
+    // Fetch transaction history using the REST API
+    const response = await fetch(`https://mempool.sgn.space/api/address/${address}/txs`);
+    if (!response.ok) {
+      throw new Error(`HTTP error ${response.status}`);
+    }
+    
+    const transactions = await response.json();
+    console.log(`Fetched ${transactions.length} transactions for ${address}`);
+    
+    // Find unique neighboring addresses (both inputs and outputs)
+    const neighbors = new Set();
+    
+    transactions.forEach(tx => {
+      // Find input addresses (other than the current one)
+      tx.vin.forEach(input => {
+        if (input.prevout && input.prevout.scriptpubkey_address && input.prevout.scriptpubkey_address !== address) {
+          neighbors.add(input.prevout.scriptpubkey_address);
+        }
       });
       
-      // Randomly make this an input or output
-      const isInput = Math.random() > 0.5;
-      const txid = 'tx_' + Math.random().toString(36).substring(2, 15);
-      
-      if (isInput) {
-        graph.addEdgeWithKey(txid, newAddr, nodeId, {
-          size: 1 + Math.random() * 2,
-          color: '#888',
-          isPoisoned: false,
-          amount: Math.random() * 1.5,
-          // Fix date calculation
-          date: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-        });
-      } else {
-        graph.addEdgeWithKey(txid, nodeId, newAddr, {
-          size: 1 + Math.random() * 2,
-          color: '#888',
-          isPoisoned: false,
-          amount: Math.random() * 1.5,
-          // Fix date calculation
-          date: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-        });
-      }
-    }
+      // Find output addresses (other than the current one)
+      tx.vout.forEach(output => {
+        if (output.scriptpubkey_address && output.scriptpubkey_address !== address) {
+          neighbors.add(output.scriptpubkey_address);
+        }
+      });
+    });
+    
+    console.log(`Found ${neighbors.size} unique neighboring addresses`);
+    
+    // Select the DEFAULT_NEIGHBORS closest neighbors
+    const neighborArray = Array.from(neighbors);
+    const selectedNeighbors = neighborArray.slice(0, DEFAULT_NEIGHBORS);
+    
+    // Process all transactions involving the selected neighbors
+    // Instead of filtering, we'll include all transactions
+    processTransactions(transactions);
+    
+    showNotification(`Added ${selectedNeighbors.length} neighbor nodes and their transactions`);
+  } catch (error) {
+    console.error('Error fetching neighbor nodes:', error);
+    showNotification('Failed to fetch neighbor nodes');
+    
+    // Fallback to simulated neighbors if the API call fails
+    simulateNeighborNodes(nodeId, DEFAULT_NEIGHBORS);
   }
-  
-  // Apply poison status to new elements
-  propagatePoison();
-  showNotification('Neighbor nodes loaded');
 }
 
 function updateTaggedElementsList() {
@@ -631,52 +824,111 @@ function resetGraph() {
   showNotification('Graph reset');
 }
 
+function updateInputFields() {
+  // Update HTML for address input
+  const addressInputGroup = document.querySelector('.input-group:first-of-type');
+  addressInputGroup.innerHTML = `
+    <label for="address-input">Bitcoin Addresses (one per line, format: address: label):</label>
+    <textarea id="address-input" rows="6" style="width: 100%; min-height: 100px;" placeholder="Enter Bitcoin addresses, one per line
+Format: address: label (label is optional)"></textarea>
+    <button id="add-address-btn">Add Addresses</button>
+    <div id="addresses-list"></div>
+  `;
+
+  // Update HTML for poisoned transactions input
+  const poisonInputGroup = document.querySelector('.input-group:nth-of-type(3)');
+  poisonInputGroup.innerHTML = `
+    <label>Mark as Poisoned Transactions (one per line, format: txid: label):</label>
+    <textarea id="poison-input" rows="6" style="width: 100%; min-height: 100px;" placeholder="Enter transaction IDs, one per line
+Format: txid: label (label is optional)"></textarea>
+    <button id="add-poison-btn">Add Poisoned Transactions</button>
+    <div id="poisoned-list"></div>
+  `;
+}
+
+function updateAddressItemsStyle() {
+  const addressItems = document.querySelectorAll('.address-item span');
+  addressItems.forEach(item => {
+    const address = item.title;
+    if (graph.hasNode(address)) {
+      const type = graph.getNodeAttribute(address, 'type');
+      if (type === 'input') {
+        item.classList.add('input-address');
+        item.classList.remove('output-address');
+      } else if (type === 'output') {
+        item.classList.add('output-address');
+        item.classList.remove('input-address');
+      }
+    }
+  });
+}
+
+function simulateNeighborNodes(nodeId, count) {
+  // Add 'count' new nodes as neighbors
+  for (let i = 0; i < count; i++) {
+    const newAddr = Math.random().toString(36).substring(2, 15);
+    // Only add if it doesn't already exist
+    if (!graph.hasNode(newAddr)) {
+      const isInput = Math.random() > 0.5;
+      
+      graph.addNode(newAddr, {
+        label: newAddr,  // Full address as label
+        x: graph.getNodeAttribute(nodeId, 'x') + (Math.random() - 0.5) * 0.5,
+        y: graph.getNodeAttribute(nodeId, 'y') + (Math.random() - 0.5) * 0.5,
+        size: 4 + Math.random() * 6, // 2x bigger
+        color: '#4CAF50',
+        isPoisoned: false,
+        balance: Math.random() * 3,
+        shape: isInput ? 'square' : 'circle'
+      });
+      
+      const txid = Math.random().toString(36).substring(2, 15);
+      const sats = Math.round(Math.random() * 10000000);
+      
+      if (isInput) {
+        graph.addEdgeWithKey(txid, newAddr, nodeId, {
+          size: 2 + Math.random() * 2, // 2x bigger
+          color: '#888',
+          isPoisoned: false,
+          amount: sats / 100000000,
+          sats: sats,
+          date: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          txid: txid,
+          label: `${sats} sats` // Show sats on edge
+        });
+      } else {
+        graph.addEdgeWithKey(txid, nodeId, newAddr, {
+          size: 2 + Math.random() * 2, // 2x bigger
+          color: '#888',
+          isPoisoned: false,
+          amount: sats / 100000000,
+          sats: sats,
+          date: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          txid: txid,
+          label: `${sats} sats` // Show sats on edge
+        });
+      }
+    }
+  }
+  // Apply poison status to new elements
+  propagatePoison();
+  sigmaInstance.refresh();
+}
+
 // Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
-  // Add address button
   document.getElementById('add-address-btn').addEventListener('click', addAddress);
-  
-  // Address input field - add on Enter key
-  document.getElementById('address-input').addEventListener('keyup', event => {
-    if (event.key === 'Enter') {
-      addAddress();
-    }
-  });
-  
-  // Fetch data button
   document.getElementById('fetch-data-btn').addEventListener('click', fetchTransactionData);
-  
-  // Add poison button
   document.getElementById('add-poison-btn').addEventListener('click', addPoisoned);
-  
-  // Poison input field - add on Enter key
-  document.getElementById('poison-input').addEventListener('keyup', event => {
-    if (event.key === 'Enter') {
-      addPoisoned();
-    }
-  });
-  
-  // Propagate poison button
   document.getElementById('propagate-poison-btn').addEventListener('click', propagatePoison);
-  
-  // Reset graph button
   document.getElementById('reset-graph-btn').addEventListener('click', resetGraph);
   
-  // Initialize the display
-  updateAddressesList();
-  updatePoisonedList();
+  // Update tagged elements list
+  updateTaggedElementsList();
   
-  // Example addresses for testing (Bitcoin testnet addresses)
-  const testAddresses = [
-    'tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx',
-    'tb1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3q0sl5k7'
-  ];
-  
-  // Uncomment to add test addresses by default
-  /*
-  testAddresses.forEach(addr => {
-    addresses.add(addr);
-  });
-  updateAddressesList();
-  */
+  // Set propagation direction to 'both' by default
+  const propagationDirectionSelect = document.getElementById('propagation-direction');
+  if (propagationDirectionSelect) {
+    propagationDirectionSelect.value = 'both';
+  }
 });

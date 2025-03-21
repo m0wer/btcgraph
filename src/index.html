@@ -13,11 +13,10 @@
     <h2>Bitcoin Transaction Visualizer</h2>
     
     <div class="input-group">
-      <label for="address-input">Bitcoin Address:</label>
-      <div style="display: flex;">
-        <input type="text" id="address-input" placeholder="Enter Bitcoin address">
-        <button id="add-address-btn" style="width: auto; margin-left: 5px;">Add</button>
-      </div>
+      <label for="address-input">Bitcoin Addresses:</label>
+      <textarea id="address-input" rows="6" placeholder="Enter Bitcoin addresses, one per line
+    Format: address: label (label is optional)"></textarea>
+      <button id="add-address-btn">Add Addresses</button>
       <div id="addresses-list"></div>
     </div>
     
@@ -27,14 +26,9 @@
     
     <div class="input-group">
       <label>Mark as Poisoned:</label>
-      <div style="display: flex;">
-        <select id="poison-type">
-          <option value="address">Address</option>
-          <option value="transaction">Transaction</option>
-        </select>
-        <input type="text" id="poison-input" placeholder="Enter address or transaction ID">
-        <button id="add-poison-btn" style="width: auto; margin-left: 5px;">Add</button>
-      </div>
+      <textarea id="poison-input" rows="6" placeholder="Enter transaction IDs, one per line
+    Format: txid: label (label is optional)"></textarea>
+      <button id="add-poison-btn">Add Poisoned Transactions</button>
       <div id="poisoned-list"></div>
     </div>
     
