@@ -407,18 +407,25 @@ function renderGraph() {
   if (sigmaInstance) {
     sigmaInstance.kill();
   }
-
+  
+  // ForceAtlas2 initial settings
+  const fa2Settings = {
+    adjustSizes: true,
+    barnesHutOptimize: false,
+    strongGravityMode: true,
+    gravity: 0.05,
+    scalingRatio: 1,
+    slowDown: 1,
+  };
+  
+  // Create layout controls panel
+  createLayoutControlsPanel(fa2Settings);
+  
+  // Initialize layout
   const settings = graphologyLibrary.layoutForceAtlas2.inferSettings(graph);
   graphologyLibrary.layoutForceAtlas2.assign(graph, {
-    iterations: 50000,
-    settings: {
-      adjustSizes: true,
-      barnesHutOptimize: false,
-      strongGravityMode: true,
-      gravity: 0.05,
-      scalingRatio: 1,
-      slowDown: 1,
-    },
+    iterations: 50,
+    settings: fa2Settings,
   });
   
   // Improved settings for better visualization
@@ -442,7 +449,6 @@ function renderGraph() {
     nodeReducer: (node, data) => {
       const size = Math.max(5, Math.min(20, data.size * 1.5));
       const shape = data.shape || 'circle';
-      
       // Only show labels for input nodes (square shape) or tagged nodes
       if (shape !== 'square' && !taggedAddresses.has(node)) {
         return {
@@ -451,7 +457,6 @@ function renderGraph() {
           label: '' // Remove label for non-input nodes that aren't tagged
         };
       }
-      
       return {
         ...data,
         size
@@ -460,19 +465,17 @@ function renderGraph() {
     edgeReducer: (edge, data) => {
       // Ensure edge sizes are not too small or too large
       const size = Math.max(1, Math.min(5, data.size));
-      
       // Format the sats with commas if available
       if (data.sats) {
         data.label = `${data.sats.toLocaleString()} sats`;
       }
-      
       return {
         ...data,
         size
       };
     },
   });
-
+  
   // Add a button to start/stop the layout
   const layoutControlBtn = document.createElement('button');
   layoutControlBtn.textContent = 'Stop Layout';
@@ -480,7 +483,26 @@ function renderGraph() {
   layoutControlBtn.style.top = '10px';
   layoutControlBtn.style.right = '10px';
   layoutControlBtn.style.zIndex = '1000';
+  layoutControlBtn.id = 'layout-control-btn';
   container.appendChild(layoutControlBtn);
+  
+  // Initialize layout state and button control
+  let isLayoutRunning = true;
+  const supervisor = new graphologyLibrary.layoutForceAtlas2.FA2Layout(graph, {
+    settings: fa2Settings
+  });
+  supervisor.start();
+  
+  layoutControlBtn.addEventListener('click', () => {
+    if (isLayoutRunning) {
+      supervisor.stop();
+      layoutControlBtn.textContent = 'Start Layout';
+    } else {
+      supervisor.start();
+      layoutControlBtn.textContent = 'Stop Layout';
+    }
+    isLayoutRunning = !isLayoutRunning;
+  });
   
   // Apply poison status to initial marked elements
   propagatePoison();
@@ -514,6 +536,213 @@ function renderGraph() {
   
   // Update the tagged elements section
   updateTaggedElementsList();
+}
+
+function createLayoutControlsPanel(fa2Settings) {
+  // Create layout controls panel
+  const container = document.getElementById('graph');
+  
+  const controlsPanel = document.createElement('div');
+  controlsPanel.id = 'layout-controls-panel';
+  controlsPanel.style.cssText = `
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    background: rgba(255, 255, 255, 0.8);
+    padding: 10px;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    width: 280px;
+  `;
+  
+  // Create title and toggle
+  const titleBar = document.createElement('div');
+  titleBar.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;';
+  
+  const title = document.createElement('h3');
+  title.textContent = 'Layout Settings';
+  title.style.cssText = 'margin: 0; font-size: 14px;';
+  
+  const toggleButton = document.createElement('button');
+  toggleButton.textContent = 'Hide';
+  toggleButton.style.cssText = 'padding: 2px 8px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 3px;';
+  
+  titleBar.appendChild(title);
+  titleBar.appendChild(toggleButton);
+  controlsPanel.appendChild(titleBar);
+  
+  // Create content div that can be toggled
+  const contentDiv = document.createElement('div');
+  contentDiv.id = 'layout-controls-content';
+  controlsPanel.appendChild(contentDiv);
+  
+  // Toggle button functionality
+  toggleButton.addEventListener('click', () => {
+    if (contentDiv.style.display === 'none') {
+      contentDiv.style.display = 'block';
+      toggleButton.textContent = 'Hide';
+    } else {
+      contentDiv.style.display = 'none';
+      toggleButton.textContent = 'Show';
+    }
+  });
+  
+  // Create sliders
+  const sliderConfigs = [
+    { id: 'gravity', label: 'Gravity', min: 0, max: 1, step: 0.01, defaultValue: fa2Settings.gravity },
+    { id: 'scaling-ratio', label: 'Scaling Ratio', min: 0.1, max: 10, step: 0.1, defaultValue: fa2Settings.scalingRatio },
+    { id: 'slow-down', label: 'Slow Down', min: 0.1, max: 10, step: 0.1, defaultValue: fa2Settings.slowDown }
+  ];
+  
+  sliderConfigs.forEach(config => {
+    const sliderContainer = document.createElement('div');
+    sliderContainer.style.cssText = 'margin-bottom: 8px;';
+    
+    const label = document.createElement('label');
+    label.textContent = `${config.label}: ${config.defaultValue}`;
+    label.htmlFor = config.id;
+    label.style.cssText = 'display: block; font-size: 12px; margin-bottom: 4px;';
+    
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.id = config.id;
+    slider.min = config.min;
+    slider.max = config.max;
+    slider.step = config.step;
+    slider.value = config.defaultValue;
+    slider.style.cssText = 'width: 100%;';
+    
+    sliderContainer.appendChild(label);
+    sliderContainer.appendChild(slider);
+    contentDiv.appendChild(sliderContainer);
+    
+    // Add slider event listener
+    slider.addEventListener('input', () => {
+      const value = parseFloat(slider.value);
+      label.textContent = `${config.label}: ${value}`;
+      
+      // Update FA2 settings based on slider ID
+      if (config.id === 'gravity') {
+        fa2Settings.gravity = value;
+      } else if (config.id === 'scaling-ratio') {
+        fa2Settings.scalingRatio = value;
+      } else if (config.id === 'slow-down') {
+        fa2Settings.slowDown = value;
+      }
+      
+      // Update the layout supervisor if it exists
+      const supervisor = document.getElementById('layout-control-btn') ? 
+        document.getElementById('layout-control-btn').__supervisor : null;
+      
+      if (supervisor && supervisor.isRunning()) {
+        supervisor.kill();
+        supervisor.configure({ settings: fa2Settings });
+        supervisor.start();
+      }
+    });
+  });
+  
+  // Add checkboxes
+  const checkboxConfigs = [
+    { id: 'adjust-sizes', label: 'Adjust Sizes', defaultValue: fa2Settings.adjustSizes },
+    { id: 'barnes-hut', label: 'Barnes-Hut Optimization', defaultValue: fa2Settings.barnesHutOptimize },
+    { id: 'strong-gravity', label: 'Strong Gravity Mode', defaultValue: fa2Settings.strongGravityMode }
+  ];
+  
+  checkboxConfigs.forEach(config => {
+    const checkboxContainer = document.createElement('div');
+    checkboxContainer.style.cssText = 'margin-bottom: 8px; display: flex; align-items: center;';
+    
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.id = config.id;
+    checkbox.checked = config.defaultValue;
+    checkbox.style.cssText = 'margin-right: 8px;';
+    
+    const label = document.createElement('label');
+    label.textContent = config.label;
+    label.htmlFor = config.id;
+    label.style.cssText = 'font-size: 12px;';
+    
+    checkboxContainer.appendChild(checkbox);
+    checkboxContainer.appendChild(label);
+    contentDiv.appendChild(checkboxContainer);
+    
+    // Add checkbox event listener
+    checkbox.addEventListener('change', () => {
+      // Update FA2 settings based on checkbox ID
+      if (config.id === 'adjust-sizes') {
+        fa2Settings.adjustSizes = checkbox.checked;
+      } else if (config.id === 'barnes-hut') {
+        fa2Settings.barnesHutOptimize = checkbox.checked;
+      } else if (config.id === 'strong-gravity') {
+        fa2Settings.strongGravityMode = checkbox.checked;
+      }
+      
+      // Update the layout supervisor if it exists
+      const supervisor = document.getElementById('layout-control-btn') ? 
+        document.getElementById('layout-control-btn').__supervisor : null;
+      
+      if (supervisor && supervisor.isRunning()) {
+        supervisor.kill();
+        supervisor.configure({ settings: fa2Settings });
+        supervisor.start();
+      }
+    });
+  });
+  
+  // Add "Reset to Defaults" button
+  const resetButton = document.createElement('button');
+  resetButton.textContent = 'Reset to Defaults';
+  resetButton.style.cssText = 'width: 100%; padding: 5px; margin-top: 10px;';
+  contentDiv.appendChild(resetButton);
+  
+  resetButton.addEventListener('click', () => {
+    // Reset to default FA2 settings
+    fa2Settings.adjustSizes = true;
+    fa2Settings.barnesHutOptimize = false;
+    fa2Settings.strongGravityMode = true;
+    fa2Settings.gravity = 0.05;
+    fa2Settings.scalingRatio = 1;
+    fa2Settings.slowDown = 1;
+    
+    // Update all controls
+    sliderConfigs.forEach(config => {
+      const slider = document.getElementById(config.id);
+      const label = slider.previousElementSibling;
+      
+      if (config.id === 'gravity') {
+        slider.value = 0.05;
+        label.textContent = `${config.label}: 0.05`;
+      } else if (config.id === 'scaling-ratio' || config.id === 'slow-down') {
+        slider.value = 1;
+        label.textContent = `${config.label}: 1`;
+      }
+    });
+    
+    checkboxConfigs.forEach(config => {
+      const checkbox = document.getElementById(config.id);
+      
+      if (config.id === 'adjust-sizes' || config.id === 'strong-gravity') {
+        checkbox.checked = true;
+      } else if (config.id === 'barnes-hut') {
+        checkbox.checked = false;
+      }
+    });
+    
+    // Update the layout supervisor if it exists
+    const supervisor = document.getElementById('layout-control-btn') ? 
+      document.getElementById('layout-control-btn').__supervisor : null;
+    
+    if (supervisor && supervisor.isRunning()) {
+      supervisor.kill();
+      supervisor.configure({ settings: fa2Settings });
+      supervisor.start();
+    }
+  });
+  
+  container.appendChild(controlsPanel);
 }
 
 function showEdgeInfo(edgeId) {
@@ -779,14 +1008,24 @@ function updateTaggedElementsList() {
 function resetGraph() {
   // Clear the graph and reset all data structures
   graph.clear();
-  
   if (sigmaInstance) {
+    // Stop any running layout supervisor
+    const layoutControlBtn = document.getElementById('layout-control-btn');
+    if (layoutControlBtn && layoutControlBtn.__supervisor) {
+      layoutControlBtn.__supervisor.kill();
+    }
+    
+    // Remove layout controls panel
+    const controlsPanel = document.getElementById('layout-controls-panel');
+    if (controlsPanel) {
+      controlsPanel.remove();
+    }
+    
     sigmaInstance.kill();
     sigmaInstance = null;
   }
   
   // Don't clear addresses or poisoned items as user might want to reuse them
-  
   // Reset the node and edge info panels
   document.getElementById('node-info').style.display = 'none';
   document.getElementById('edge-info').style.display = 'none';
@@ -795,7 +1034,6 @@ function resetGraph() {
   taggedAddresses.clear();
   taggedTransactions.clear();
   updateTaggedElementsList();
-  
   showNotification('Graph reset');
 }
 
