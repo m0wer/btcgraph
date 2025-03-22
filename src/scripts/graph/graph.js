@@ -5,6 +5,8 @@ import {
   taggedTransactions,
 } from "../state.js";
 
+import { showNotification } from "../utils/index.js";
+
 import { showNodeInfo, fetchNeighborNodes } from "./node.js";
 
 import { updateTaggedElementsList } from "../menu/index.js";
