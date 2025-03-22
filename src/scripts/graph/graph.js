@@ -18,7 +18,9 @@ const graph = new graphology.Graph();
 var sigmaInstance = null;
 
 const nodeSizeFactor = 1 / 1000000;
+const minNodeSize = 5;
 const edgeSizeFactor = nodeSizeFactor / 10;
+const minEdgeSize = 1;
 
 const paintTransactions = (transactions) => {
   transactions.forEach((tx) => {
@@ -32,7 +34,7 @@ const paintTransactions = (transactions) => {
             label: inputAddress.substring(0, 8) + "...",
             x: Math.random(),
             y: Math.random(),
-            size: input.prevout.value * nodeSizeFactor,
+            size: Math.max(input.prevout.value * nodeSizeFactor, minNodeSize),
             color: "#4CAF50",
             isPoisoned: false,
             balance: input.prevout.value,
@@ -51,7 +53,7 @@ const paintTransactions = (transactions) => {
             label: outputAddress.substring(0, 8) + "...",
             x: Math.random(),
             y: Math.random(),
-            size: output.value * nodeSizeFactor,
+            size: Math.max(output.value * nodeSizeFactor, minNodeSize),
             color: "#4CAF50",
             isPoisoned: false,
             balance: output.value,
@@ -74,7 +76,7 @@ const paintTransactions = (transactions) => {
               graph.hasNode(outputAddress)
             ) {
               graph.addEdgeWithKey(tx.txid, inputAddress, outputAddress, {
-                size: output.value * edgeSizeFactor,
+                size: Math.max(output.value * edgeSizeFactor, minEdgeSize),
                 color: "#888",
                 isPoisoned: false,
                 amount: output.value,
