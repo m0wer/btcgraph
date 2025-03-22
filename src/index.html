@@ -1,101 +1,114 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bitcoin Transaction Poison Propagation Visualizer</title>
-  <script src="scripts/sigma.min.js"></script>
-  <script src="scripts/graphology.umd.min.js"></script>
-  <link rel="stylesheet" href="styles/main.css">
-</head>
-<body>
-  <div id="sidebar">
-    <h2>Bitcoin Transaction Visualizer</h2>
-    
-    <div class="input-group">
-      <label for="address-input">Bitcoin Address:</label>
-      <div style="display: flex;">
-        <input type="text" id="address-input" placeholder="Enter Bitcoin address">
-        <button id="add-address-btn" style="width: auto; margin-left: 5px;">Add</button>
-      </div>
-      <div id="addresses-list"></div>
-    </div>
-    
-    <div class="input-group">
-      <button id="fetch-data-btn">Fetch Transaction Data</button>
-    </div>
-    
-    <div class="input-group">
-      <label>Mark as Poisoned:</label>
-      <div style="display: flex;">
-        <select id="poison-type">
-          <option value="address">Address</option>
-          <option value="transaction">Transaction</option>
-        </select>
-        <input type="text" id="poison-input" placeholder="Enter address or transaction ID">
-        <button id="add-poison-btn" style="width: auto; margin-left: 5px;">Add</button>
-      </div>
-      <div id="poisoned-list"></div>
-    </div>
-    
-    <div class="input-group">
-      <button id="propagate-poison-btn">Propagate Poison</button>
-    </div>
-    
-    <div class="input-group">
-      <select id="propagation-direction">
-        <option value="forward">Forward Propagation</option>
-        <option value="backward">Backward Propagation</option>
-        <option value="both">Both Directions</option>
-      </select>
-    </div>
-    
-    <div class="input-group">
-      <button id="reset-graph-btn">Reset Graph</button>
-    </div>
-    
-    <div class="node-info" id="node-info" style="display: none;">
-      <h3>Address Information</h3>
-      <div id="node-details"></div>
-    </div>
-    
-    <div class="edge-info" id="edge-info" style="display: none;">
-      <h3>Transaction Information</h3>
-      <div id="edge-details"></div>
-    </div>
-    
-    <div id="tagged-elements">
-      <div class="tag-list-title">Tagged Addresses:</div>
-      <div id="tagged-addresses"></div>
-      <div class="tag-list-title">Tagged Transactions:</div>
-      <div id="tagged-transactions"></div>
-    </div>
-  </div>
-  
-  <div id="graph-container">
-    <div id="graph"></div>
-    <div id="legend">
-      <h4>Legend</h4>
-      <div class="legend-item">
-        <div class="legend-color" style="background-color: #4CAF50;"></div>
-        <span>Clean Address</span>
-      </div>
-      <div class="legend-item">
-        <div class="legend-color" style="background-color: #f44336;"></div>
-        <span>Poisoned Address</span>
-      </div>
-      <div class="legend-item">
-        <div class="legend-color" style="background-color: #888;"></div>
-        <span>Clean Transaction</span>
-      </div>
-      <div class="legend-item">
-        <div class="legend-color" style="background-color: #f44336;"></div>
-        <span>Poisoned Transaction</span>
-      </div>
-    </div>
-    <div id="notification"></div>
-  </div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bitcoin Transaction Poison Propagation Visualizer</title>
+    <script src="scripts/sigma.min.js"></script>
+    <script src="scripts/graphology.umd.min.js"></script>
+    <link rel="stylesheet" href="styles/main.css" />
+    <base href="." />
+  </head>
+  <body>
+    <div id="sidebar">
+      <h2>Bitcoin Transaction Visualizer</h2>
 
-  <script src="scripts/main.js"></script>
-</body>
+      <div class="input-group">
+        <label for="address-input">Bitcoin Address:</label>
+        <div style="display: flex">
+          <input
+            type="text"
+            id="address-input"
+            placeholder="Enter Bitcoin address"
+          />
+          <button id="add-address-btn" style="width: auto; margin-left: 5px">
+            Add
+          </button>
+        </div>
+        <div id="addresses-list"></div>
+      </div>
+
+      <div class="input-group">
+        <button id="fetch-data-btn">Fetch Transaction Data</button>
+      </div>
+
+      <div class="input-group">
+        <label>Mark as Poisoned:</label>
+        <div style="display: flex">
+          <select id="poison-type">
+            <option value="address">Address</option>
+            <option value="transaction">Transaction</option>
+          </select>
+          <input
+            type="text"
+            id="poison-input"
+            placeholder="Enter address or transaction ID"
+          />
+          <button id="add-poison-btn" style="width: auto; margin-left: 5px">
+            Add
+          </button>
+        </div>
+        <div id="poisoned-list"></div>
+      </div>
+
+      <div class="input-group">
+        <button id="propagate-poison-btn">Propagate Poison</button>
+      </div>
+
+      <div class="input-group">
+        <select id="propagation-direction">
+          <option value="forward">Forward Propagation</option>
+          <option value="backward">Backward Propagation</option>
+          <option value="both">Both Directions</option>
+        </select>
+      </div>
+
+      <div class="input-group">
+        <button id="reset-graph-btn">Reset Graph</button>
+      </div>
+
+      <div class="node-info" id="node-info" style="display: none">
+        <h3>Address Information</h3>
+        <div id="node-details"></div>
+      </div>
+
+      <div class="edge-info" id="edge-info" style="display: none">
+        <h3>Transaction Information</h3>
+        <div id="edge-details"></div>
+      </div>
+
+      <div id="tagged-elements">
+        <div class="tag-list-title">Tagged Addresses:</div>
+        <div id="tagged-addresses"></div>
+        <div class="tag-list-title">Tagged Transactions:</div>
+        <div id="tagged-transactions"></div>
+      </div>
+    </div>
+
+    <div id="graph-container">
+      <div id="graph"></div>
+      <div id="legend">
+        <h4>Legend</h4>
+        <div class="legend-item">
+          <div class="legend-color" style="background-color: #4caf50"></div>
+          <span>Clean Address</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background-color: #f44336"></div>
+          <span>Poisoned Address</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background-color: #888"></div>
+          <span>Clean Transaction</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background-color: #f44336"></div>
+          <span>Poisoned Transaction</span>
+        </div>
+      </div>
+      <div id="notification"></div>
+    </div>
+
+    <script type="module" src="scripts/main.js"></script>
+  </body>
 </html>
