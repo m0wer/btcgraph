@@ -12,7 +12,7 @@ const showNodeInfo = (nodeId) => {
 
     nodeDetails.innerHTML = `
       <p><strong>Address:</strong> ${nodeId}</p>
-      <p><strong>Balance:</strong> ${attributes.balance.toFixed(8)} sats</p>
+      <p><strong>Balance:</strong> ${attributes.balance.toLocaleString()} sats</p>
       <p><strong>Status:</strong> ${
         attributes.isPoisoned ? "Poisoned" : "Clean"
       }</p>
