@@ -12,7 +12,7 @@ const showEdgeInfo = (edgeId) => {
       <p><strong>Transaction ID:</strong> ${edgeId}</p>
       <p><strong>From:</strong> ${source}</p>
       <p><strong>To:</strong> ${target}</p>
-      <p><strong>Amount:</strong> ${attributes.amount.toFixed(8)} BTC</p>
+      <p><strong>Amount:</strong> ${attributes.amount.toFixed(8)} sats</p>
       <p><strong>Date:</strong> ${attributes.date}</p>
       <p><strong>Status:</strong> ${
         attributes.isPoisoned ? "Poisoned" : "Clean"

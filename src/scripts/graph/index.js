@@ -9,12 +9,11 @@ import {
   propagatePoison,
 } from "./graph.js";
 
-import { showNodeInfo, fetchNeighborNodes } from "./node.js";
+import { showNodeInfo } from "./node.js";
 
 export {
   showEdgeInfo,
   showNodeInfo,
-  fetchNeighborNodes,
   paintTransactions,
   graph,
   sigmaInstance,

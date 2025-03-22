@@ -7,13 +7,16 @@ import {
 
 import { showNotification } from "../utils/index.js";
 
-import { showNodeInfo, fetchNeighborNodes } from "./node.js";
+import { showNodeInfo } from "./node.js";
 
 import { updateTaggedElementsList } from "../menu/index.js";
 
 const graph = new graphology.Graph();
 
 var sigmaInstance = null;
+
+const nodeSizeFactor = 1 / 1000000;
+const edgeSizeFactor = nodeSizeFactor / 10;
 
 const paintTransactions = (transactions) => {
   transactions.forEach((tx) => {
@@ -27,10 +30,10 @@ const paintTransactions = (transactions) => {
             label: inputAddress.substring(0, 8) + "...",
             x: Math.random(),
             y: Math.random(),
-            size: 3 + input.prevout.value / 100000000, // Size based on BTC value
+            size: input.prevout.value * nodeSizeFactor,
             color: "#4CAF50",
             isPoisoned: false,
-            balance: input.prevout.value / 100000000,
+            balance: input.prevout.value,
           });
         }
       }
@@ -46,10 +49,10 @@ const paintTransactions = (transactions) => {
             label: outputAddress.substring(0, 8) + "...",
             x: Math.random(),
             y: Math.random(),
-            size: 3 + output.value / 100000000, // Size based on BTC value
+            size: output.value * nodeSizeFactor,
             color: "#4CAF50",
             isPoisoned: false,
-            balance: output.value / 100000000,
+            balance: output.value,
           });
         }
       }
@@ -69,10 +72,10 @@ const paintTransactions = (transactions) => {
               graph.hasNode(outputAddress)
             ) {
               graph.addEdgeWithKey(tx.txid, inputAddress, outputAddress, {
-                size: 1 + output.value / 50000000, // Size based on BTC value
+                size: output.value * edgeSizeFactor,
                 color: "#888",
                 isPoisoned: false,
-                amount: output.value / 100000000,
+                amount: output.value,
                 date: new Date(tx.status.block_time * 1000)
                   .toISOString()
                   .split("T")[0],
@@ -125,22 +128,20 @@ const renderGraph = () => {
     sigmaInstance.kill();
   }
 
-  sigmaInstance = new Sigma(graph, container, {
-    renderEdgeLabels: false,
-    defaultEdgeType: "arrow",
-    labelDensity: 0.07,
-    labelGridCellSize: 60,
-    labelRenderedSizeThreshold: 6,
-    minCameraRatio: 0.1,
-    maxCameraRatio: 10,
+  // Initialize layout
+  const settings = graphologyLibrary.layoutForceAtlas2.inferSettings(graph);
+  graphologyLibrary.layoutForceAtlas2.assign(graph, {
+    iterations: 50,
+    settings: settings,
   });
+
+  sigmaInstance = new Sigma(graph, container);
 
   // Apply poison status to initial marked elements
   propagatePoison();
   // Add event listeners for node and edge clicks
   sigmaInstance.on("clickNode", ({ node }) => {
     showNodeInfo(node);
-    fetchNeighborNodes(node);
   });
   sigmaInstance.on("clickEdge", ({ edge }) => {
     showEdgeInfo(edge);
