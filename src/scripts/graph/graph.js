@@ -8,6 +8,7 @@ import {
 import { showNotification } from "../utils/index.js";
 
 import { showNodeInfo } from "./node.js";
+import { showEdgeInfo } from "./edge.js";
 
 import { updateTaggedElementsList } from "../menu/index.js";
 

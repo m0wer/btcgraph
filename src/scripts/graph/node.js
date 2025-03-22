@@ -1,6 +1,5 @@
 import { graph, sigmaInstance, propagatePoison } from "./graph.js";
 import { taggedAddresses } from "../state.js";
-import { showNotification } from "../utils/index.js";
 import { updateTaggedElementsList } from "../menu/index.js";
 
 const showNodeInfo = (nodeId) => {
