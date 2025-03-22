@@ -11,6 +11,7 @@ import { showNodeInfo } from "./node.js";
 import { showEdgeInfo } from "./edge.js";
 
 import { updateTaggedElementsList } from "../menu/index.js";
+import { fetchAddressTxs } from "../api/mempool.js";
 
 const graph = new graphology.Graph();
 
@@ -141,8 +142,10 @@ const renderGraph = () => {
   // Apply poison status to initial marked elements
   propagatePoison();
   // Add event listeners for node and edge clicks
-  sigmaInstance.on("clickNode", ({ node }) => {
+  sigmaInstance.on("clickNode", async ({ node }) => {
     showNodeInfo(node);
+    let transactions = await fetchAddressTxs(node);
+    paintTransactions(transactions);
   });
   sigmaInstance.on("clickEdge", ({ edge }) => {
     showEdgeInfo(edge);
