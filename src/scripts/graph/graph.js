@@ -18,10 +18,11 @@ const graph = new graphology.Graph();
 var sigmaInstance = null;
 var forceAtlasLayout = null;
 
-const nodeSizeFactor = 1 / 10000000;
-const minNodeSize = 5;
+const nodeSizeFactor = 1 / 100;
+const minNodeSize = 10;
 const edgeSizeFactor = nodeSizeFactor / 10;
 const minEdgeSize = 1;
+const MAX_BTC = 100000000; // 1 BTC in satoshis
 
 const paintTransactions = (transactions) => {
   transactions.forEach((tx) => {
@@ -31,11 +32,14 @@ const paintTransactions = (transactions) => {
         const inputAddress = input.prevout.scriptpubkey_address;
         // Add input address if it doesn't exist
         if (!graph.hasNode(inputAddress)) {
+          // Use square root of value for node size, capped at 1 BTC
+          const cappedValue = Math.min(input.prevout.value, MAX_BTC);
+          const nodeSize = Math.max(Math.sqrt(cappedValue) * nodeSizeFactor, minNodeSize);
           graph.addNode(inputAddress, {
             label: inputAddress.substring(0, 8) + "...",
             x: Math.random() * 100 - 50,
             y: Math.random() * 100 - 50,
-            size: Math.max(input.prevout.value * nodeSizeFactor, minNodeSize),
+            size: nodeSize,
             color: "#4CAF50",
             isPoisoned: false,
             balance: input.prevout.value,
@@ -50,11 +54,14 @@ const paintTransactions = (transactions) => {
         const outputAddress = output.scriptpubkey_address;
         // Add output address if it doesn't exist
         if (!graph.hasNode(outputAddress)) {
+          // Use square root of value for node size, capped at 1 BTC
+          const cappedValue = Math.min(output.value, MAX_BTC);
+          const nodeSize = Math.max(Math.sqrt(cappedValue) * nodeSizeFactor, minNodeSize);
           graph.addNode(outputAddress, {
             label: outputAddress.substring(0, 8) + "...",
             x: Math.random() * 100 - 50,
             y: Math.random() * 100 - 50,
-            size: Math.max(output.value * nodeSizeFactor, minNodeSize),
+            size: nodeSize,
             color: "#4CAF50",
             isPoisoned: false,
             balance: output.value,
@@ -76,8 +83,11 @@ const paintTransactions = (transactions) => {
               graph.hasNode(inputAddress) &&
               graph.hasNode(outputAddress)
             ) {
+              // Use square root of value for edge size, capped at 1 BTC
+              const cappedValue = Math.min(output.value, MAX_BTC);
+              const edgeSize = Math.max(Math.sqrt(cappedValue) * edgeSizeFactor, minEdgeSize);
               graph.addEdgeWithKey(tx.txid, inputAddress, outputAddress, {
-                size: Math.max(output.value * edgeSizeFactor, minEdgeSize),
+                size: edgeSize,
                 color: "#888",
                 isPoisoned: false,
                 amount: output.value,
