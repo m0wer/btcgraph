@@ -16,8 +16,9 @@ import { fetchAddressTxs } from "../api/mempool.js";
 const graph = new graphology.Graph();
 
 var sigmaInstance = null;
+var forceAtlasLayout = null;
 
-const nodeSizeFactor = 1 / 1000000;
+const nodeSizeFactor = 1 / 10000000;
 const minNodeSize = 5;
 const edgeSizeFactor = nodeSizeFactor / 10;
 const minEdgeSize = 1;
@@ -32,8 +33,8 @@ const paintTransactions = (transactions) => {
         if (!graph.hasNode(inputAddress)) {
           graph.addNode(inputAddress, {
             label: inputAddress.substring(0, 8) + "...",
-            x: Math.random(),
-            y: Math.random(),
+            x: Math.random() * 100 - 50,
+            y: Math.random() * 100 - 50,
             size: Math.max(input.prevout.value * nodeSizeFactor, minNodeSize),
             color: "#4CAF50",
             isPoisoned: false,
@@ -51,8 +52,8 @@ const paintTransactions = (transactions) => {
         if (!graph.hasNode(outputAddress)) {
           graph.addNode(outputAddress, {
             label: outputAddress.substring(0, 8) + "...",
-            x: Math.random(),
-            y: Math.random(),
+            x: Math.random() * 100 - 50,
+            y: Math.random() * 100 - 50,
             size: Math.max(output.value * nodeSizeFactor, minNodeSize),
             color: "#4CAF50",
             isPoisoned: false,
@@ -110,6 +111,14 @@ const resetGraph = () => {
     sigmaInstance.kill();
     sigmaInstance = null;
   }
+  
+  // Stop the ForceAtlas2 layout if it's running
+  if (forceAtlasLayout) {
+    if (forceAtlasLayout.isRunning()) {
+      forceAtlasLayout.stop();
+    }
+    forceAtlasLayout = null;
+  }
 
   // Don't clear addresses or poisoned items as user might want to reuse them
 
@@ -125,6 +134,37 @@ const resetGraph = () => {
   showNotification("Graph reset");
 };
 
+const startForceAtlas = () => {
+  if (graph.order === 0) return; // Don't start if graph is empty
+  
+  // Initialize layout if not already done
+  if (!forceAtlasLayout) {
+    // First, infer sensible settings for the graph
+    const settings = graphologyLibrary.layoutForceAtlas2.inferSettings(graph);
+    
+    // Create the ForceAtlas2 worker layout
+    forceAtlasLayout = new graphologyLibrary.FA2Layout(graph, {
+      settings: {
+        ...settings,
+        slowDown: 10,
+        gravity: 1,
+        barnesHutOptimize: true,
+      },
+    });
+  }
+  
+  // Start the layout if it's not already running
+  if (forceAtlasLayout.isRunning()) {
+    forceAtlasLayout.stop();
+    document.getElementById("layout-button").textContent = "Start Layout";
+    document.getElementById("layout-button").classList.remove("active");
+  } else {
+    forceAtlasLayout.start();
+    document.getElementById("layout-button").textContent = "Stop Layout";
+    document.getElementById("layout-button").classList.add("active");
+  }
+};
+
 const renderGraph = () => {
   // Initialize sigma
   const container = document.getElementById("graph");
@@ -132,26 +172,40 @@ const renderGraph = () => {
     sigmaInstance.kill();
   }
 
-  // Initialize layout
-  const settings = graphologyLibrary.layoutForceAtlas2.inferSettings(graph);
-  graphologyLibrary.layoutForceAtlas2.assign(graph, {
-    iterations: 50,
-    settings: settings,
-  });
+  // Run a quick force atlas layout to get initial positions
+  if (graph.order > 0) {
+    const settings = graphologyLibrary.layoutForceAtlas2.inferSettings(graph);
+    graphologyLibrary.layoutForceAtlas2.assign(graph, {
+      iterations: 50,
+      settings: settings,
+    });
+  }
 
-  sigmaInstance = new Sigma(graph, container);
+  sigmaInstance = new Sigma(graph, container, {
+    renderEdgeLabels: false,
+    allowInvalidContainer: true,
+    minCameraRatio: 0.1,
+    maxCameraRatio: 10,
+  });
 
   // Apply poison status to initial marked elements
   propagatePoison();
+  
   // Add event listeners for node and edge clicks
   sigmaInstance.on("clickNode", async ({ node }) => {
     showNodeInfo(node);
     let transactions = await fetchAddressTxs(node);
     paintTransactions(transactions);
   });
+  
+  sigmaInstance.on("rightClickNode", ({ node }) => {
+    toggleFixNode(node);
+  });
+  
   sigmaInstance.on("clickEdge", ({ edge }) => {
     showEdgeInfo(edge);
   });
+  
   // Update the tagged elements section
   updateTaggedElementsList();
 };
@@ -260,7 +314,6 @@ const resetPoisonStatus = () => {
   // Reset all nodes and edges to clean
   graph.forEachNode((node, attributes) => {
     graph.setNodeAttribute(node, "isPoisoned", false);
-    graph.setNodeAttribute(node, "color", "#4CAF50");
   });
 
   graph.forEachEdge((edge, attributes) => {
@@ -276,4 +329,5 @@ export {
   resetGraph,
   renderGraph,
   propagatePoison,
+  startForceAtlas,
 };

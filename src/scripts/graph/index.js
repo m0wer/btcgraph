@@ -7,6 +7,7 @@ import {
   resetGraph,
   renderGraph,
   propagatePoison,
+  startForceAtlas,
 } from "./graph.js";
 
 import { showNodeInfo } from "./node.js";
@@ -20,4 +21,5 @@ export {
   resetGraph,
   renderGraph,
   propagatePoison,
+  startForceAtlas,
 };

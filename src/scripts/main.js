@@ -1,4 +1,4 @@
-import { propagatePoison, resetGraph } from "./graph/index.js";
+import { propagatePoison, resetGraph, startForceAtlas } from "./graph/index.js";
 import { fetchAllAddressesTransactions } from "./api/index.js";
 import { addresses } from "./state.js";
 
@@ -60,4 +60,10 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize with test address
   document.getElementById("addresses-textarea").value =
     "bc1qz6d43pyldv82zrj0cusfdmsp3k3d542zl43t0y";
+
+
+  // Add event listener for the layout button
+  document.getElementById("layout-button").addEventListener("click", () => {
+    startForceAtlas();
+  });
 });

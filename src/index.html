@@ -15,7 +15,7 @@
       <h2>Bitcoin Transaction Visualizer</h2>
 
       <div class="input-group">
-        <label for="addresses-textarea">Bitcoin Addresse:</label>
+        <label for="addresses-textarea">Bitcoin Addresses:</label>
         <textarea
           id="addresses-textarea"
           placeholder="Enter Bitcoin addresses (one per line)&#10;Example:&#10;address:label"
@@ -39,13 +39,18 @@
       <div class="input-group">
         <button id="propagate-poison-btn">Propagate Poison</button>
       </div>
-
+      
       <div class="input-group">
         <select id="propagation-direction">
           <option value="forward">Forward Propagation</option>
           <option value="backward">Backward Propagation</option>
           <option value="both">Both Directions</option>
         </select>
+      </div>
+      
+      <div class="input-group">
+        <button id="layout-button">Start Layout</button>
+        <div class="tip">Right-click nodes to fix/unfix position</div>
       </div>
 
       <div class="input-group">
@@ -81,6 +86,10 @@
         <div class="legend-item">
           <div class="legend-color" style="background-color: #f44336"></div>
           <span>Poisoned Address</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background-color: #FFA500"></div>
+          <span>Fixed Position</span>
         </div>
         <div class="legend-item">
           <div class="legend-color" style="background-color: #888"></div>
